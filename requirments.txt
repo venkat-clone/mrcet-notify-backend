@@ -1,0 +1,7 @@
+requests
+firebase_admin
+bs4
+fastapi
+sqlalchemy
+uvicorn
+pytz
