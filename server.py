@@ -1,7 +1,7 @@
 import datetime
 import requests
 from bs4 import BeautifulSoup
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 import json
 import os
 import firebase_admin
@@ -11,6 +11,10 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.exc import IntegrityError
 import pytz
+from sqlalchemy import or_
+from datetime import datetime
+from typing import Optional
+from enum import Enum
 
 app = FastAPI()
 URL = "https://mrec.ac.in/ExamsDashboard"
@@ -32,8 +36,8 @@ class Notification(Base):
     id = Column(Integer, primary_key=True, index=True)
     text = Column(String, nullable=False)
     url = Column(String, nullable=False, unique=True)
-    created_at = Column(DateTime, default=datetime.datetime.now(timezone))
-    updated_at = Column(DateTime, default=datetime.datetime.now(timezone), onupdate=datetime.datetime.now(timezone))
+    created_at = Column(DateTime, default=datetime.now(timezone))
+    updated_at = Column(DateTime, default=datetime.now(timezone), onupdate=datetime.now(timezone))
 
 
     def to_dict(self):
@@ -86,11 +90,53 @@ def scrape_notifications():
     
     return scraped_notifications
 
-def load_notifications():
+class SortBy(str, Enum):
+    NEWEST = "newest"
+    OLDEST = "oldest"
+    TITLE = "title"
+
+def load_notifications(
+    skip: int = 0, 
+    limit: int = 10, 
+    search: str | None = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    sort_by: SortBy = SortBy.NEWEST
+):
     db = SessionLocal()
-    notifications = db.query(Notification).all()
+    query = db.query(Notification)
+    
+    if search:
+        print(f'searching for notifications {search}')
+        query = query.filter(
+            or_(
+                Notification.text.ilike(f"%{search}%"),
+                Notification.url.ilike(f"%{search}%")
+            )
+        )
+    
+    if start_date:
+        query = query.filter(Notification.created_at >= start_date)
+    
+    if end_date:
+        query = query.filter(Notification.created_at <= end_date)
+    
+    # Apply sorting
+    if sort_by == SortBy.NEWEST:
+        query = query.order_by(Notification.created_at.desc())
+    elif sort_by == SortBy.OLDEST:
+        query = query.order_by(Notification.created_at.asc())
+    elif sort_by == SortBy.TITLE:
+        query = query.order_by(Notification.text.asc())
+    
+    total = query.count()
+    notifications = query.offset(skip).limit(limit).all()
+    
     db.close()
-    return [notification.to_dict() for notification in notifications]
+    return {
+        "total": total,
+        "notifications": [notification.to_dict() for notification in notifications]
+    }
 
 def save_notifications(notifications):
     db = SessionLocal()
@@ -143,8 +189,23 @@ def send_firebase_notification(notification):
         return 500, {"error": str(e)}
 
 @app.get("/notifications")
-def get_notifications():
-    return load_notifications()
+def get_notifications(
+    page: int = Query(1, ge=1, description="Page number"),
+    limit: int = Query(10, ge=1, le=100, description="Items per page"),
+    query: str = Query(None, description="Search text in notification content"),
+    start_date: Optional[datetime] = Query(None, description="Filter notifications from this date"),
+    end_date: Optional[datetime] = Query(None, description="Filter notifications until this date"),
+    sort_by: SortBy = Query(SortBy.NEWEST, description="Sort notifications by: newest, oldest, or title")
+):
+    skip = (page - 1) * limit
+    return load_notifications(
+        skip=skip,
+        limit=limit,
+        search=query,
+        start_date=start_date,
+        end_date=end_date,
+        sort_by=sort_by
+    )
 
 @app.get("/scrape")
 def scrape_and_store_notifications():
