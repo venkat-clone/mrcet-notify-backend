@@ -219,6 +219,7 @@ def get_notifications(
 
 @app.get("/scrape")
 def scrape_and_store_notifications():
+    print('notification scraping started')
     notifications = scrape_notifications()
     newNotifications = save_notifications(notifications)
     for notification in newNotifications:
