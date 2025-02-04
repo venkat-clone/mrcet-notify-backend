@@ -15,10 +15,15 @@ from sqlalchemy import or_
 from datetime import datetime
 from typing import Optional
 from enum import Enum
+from dotenv import load_dotenv
+from sqlalchemy.orm.session import Session
+load_dotenv()
 
+# Replace the hardcoded DATABASE_URL with environment variable
+DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///notifications.db')  # Fallback to SQLite if not set
+PORT:int = os.getenv('PORT', 8000)  # type: ignore # Fallback to SQLite if not set
 app = FastAPI()
 URL = "https://mrec.ac.in/ExamsDashboard"
-DATABASE_URL = "sqlite:///notifications.db"
 
 # Initialize Firebase Admin SDK
 cred = credentials.Certificate("mrec-notifications-firebase-adminsdk-fbsvc-409ef00a55.json")
@@ -139,7 +144,8 @@ def load_notifications(
     }
 
 def save_notifications(notifications):
-    db = SessionLocal()
+    notificationsAdded = []
+    db: Session = SessionLocal()
     for notification_data in notifications:
         notification = Notification(
             text=notification_data["text"].strip(),
@@ -148,9 +154,11 @@ def save_notifications(notifications):
         try:
             db.add(notification)
             db.commit()
+            notificationsAdded.append(notification)
         except IntegrityError:
             db.rollback()
     db.close()
+    return notificationsAdded
 
 def delete_notification(notification_id: int):
     db = SessionLocal()
@@ -170,14 +178,15 @@ def get_notification_by_id(notification_id: int):
     return notification.to_dict() if notification else None
 
 def send_firebase_notification(notification):
+    print('New Notification sedding to Users')
     message = messaging.Message(
         notification=messaging.Notification(
             title="New Notification",
-            body=notification["text"]
+            body=notification.text
         ),
         data={
-            "click_action": notification["url"],
-            'url':notification["url"]
+            "click_action": notification.url,
+            'url':notification.url
         },
         topic="all"
     )
@@ -210,8 +219,8 @@ def get_notifications(
 @app.get("/scrape")
 def scrape_and_store_notifications():
     notifications = scrape_notifications()
-    save_notifications(notifications)
-    for notification in notifications:
+    newNotifications = save_notifications(notifications)
+    for notification in newNotifications:
         send_firebase_notification(notification)
     return {"message": "Notifications scraped, saved, and sent successfully"}
 
@@ -232,8 +241,7 @@ async def resend_notification(notification_id: int):
         return {"message": f"Notification {notification_id} resent successfully", "response": response}
     raise HTTPException(status_code=500, detail="Failed to resend notification")
 
-# Initialize the database and run the server
 if __name__ == "__main__":
     init_db()
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=PORT)

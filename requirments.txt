@@ -5,3 +5,4 @@ fastapi
 sqlalchemy
 uvicorn
 pytz
+python-dotenv
