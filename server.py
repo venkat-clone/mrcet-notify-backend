@@ -22,11 +22,12 @@ load_dotenv()
 # Replace the hardcoded DATABASE_URL with environment variable
 DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite:///notifications.db')  # Fallback to SQLite if not set
 PORT:int = os.getenv('PORT', 8000)  # type: ignore # Fallback to SQLite if not set
+FIREBASE_PATH:int = os.getenv('FIREBASE_PATH', 'mrec-notifications-firebase-adminsdk-fbsvc-409ef00a55.json')  # type: ignore # Fallback to SQLite if not set
 app = FastAPI()
 URL = "https://mrec.ac.in/ExamsDashboard"
 
 # Initialize Firebase Admin SDK
-cred = credentials.Certificate("mrec-notifications-firebase-adminsdk-fbsvc-409ef00a55.json")
+cred = credentials.Certificate(FIREBASE_PATH)
 firebase_admin.initialize_app(cred)
 
 # Database setup
