@@ -183,11 +183,11 @@ def send_firebase_notification(notification):
     message = messaging.Message(
         notification=messaging.Notification(
             title="New Notification",
-            body=notification.text
+            body=notification["text"]
         ),
         data={
-            "click_action": notification.url,
-            'url':notification.url
+            "click_action": notification["url"],
+            'url':notification["url"]
         },
         topic="all"
     )
