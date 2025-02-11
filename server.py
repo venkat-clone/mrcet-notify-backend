@@ -93,7 +93,6 @@ def scrape_notifications():
                     full_url = href
                 scraped_notifications.append({"text": text, "url": full_url})
     print("Scareped Notifications: ", len(scraped_notifications))
-    print(scraped_notifications)
     return scraped_notifications
 
 class SortBy(str, Enum):
@@ -163,7 +162,9 @@ def save_notifications(notifications):
             ).first()
 
             if notification_to_update:
-                if notification_to_update.text != text or notification_to_update.url != url:
+                if notification_to_update.url != url:
+                    print("Updating existing notification: ", notification_to_update.id)
+                    print(f"text:{notification_to_update.text != text};url:{notification_to_update.url != url}")
                     notification_to_update.text = text
                     notification_to_update.url = url
                     db.commit()
@@ -201,7 +202,8 @@ def send_firebase_notification(notification_dict):
     Sends a Firebase notification to all users if a new or updated notification is added.
     Takes a dictionary instead of SQLAlchemy model instance.
     """
-    print('Sending new notification to users...')
+    id = notification_dict['id']
+    print(f'Sending new notification to users...{id}')
     print(notification_dict)
     message = messaging.Message(
         notification=messaging.Notification(
