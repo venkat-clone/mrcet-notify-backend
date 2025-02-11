@@ -40,7 +40,7 @@ class Notification(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     text = Column(String, nullable=False)
-    url = Column(String, nullable=False, unique=True)
+    url = Column(String, nullable=False)
     created_at = Column(DateTime, default=datetime.now(timezone))
     updated_at = Column(DateTime, default=datetime.now(timezone), onupdate=datetime.now(timezone))
 
@@ -148,39 +148,35 @@ def save_notifications(notifications):
     notifications_added = []
     db: Session = SessionLocal()
 
-    for notification_data in notifications:
-        text = notification_data["text"].strip()
-        url = notification_data["url"].strip()
+    try:
+        for notification_data in notifications:
+            text = notification_data["text"].strip()
+            url = notification_data["url"].strip()
 
-        # Check if a notification with the same text & URL exists
-        existing_notification = db.query(Notification).filter_by(text=text, url=url).first()
+            existing_notification = db.query(Notification).filter_by(text=text, url=url).first()
 
-        if existing_notification:
-            # No update needed if the same notification already exists
-            continue
+            if existing_notification:
+                continue
 
-        # Check if a notification with the same text or URL exists
-        notification_to_update = db.query(Notification).filter(
-            (Notification.text == text) | (Notification.url == url)
-        ).first()
+            notification_to_update = db.query(Notification).filter(
+                (Notification.text == text) | (Notification.url == url)
+            ).first()
 
-        if notification_to_update:
-            # Update notification if text or URL is different
-            if notification_to_update.text != text or notification_to_update.url != url:
-                notification_to_update.text = text
-                notification_to_update.url = url
+            if notification_to_update:
+                if notification_to_update.text != text or notification_to_update.url != url:
+                    notification_to_update.text = text
+                    notification_to_update.url = url
+                    db.commit()
+                    notifications_added.append(notification_to_update.to_dict())  # Convert to dict
+            else:
+                new_notification = Notification(text=text, url=url)
+                db.add(new_notification)
                 db.commit()
-                notifications_added.append(notification_to_update)
-        else:
-            # Create new notification if no existing record is found
-            new_notification = Notification(text=text, url=url)
-            db.add(new_notification)
-            db.commit()
-            notifications_added.append(new_notification)
+                notifications_added.append(new_notification.to_dict())  # Convert to dict
 
-    db.close()
-    return notifications_added
-
+        return notifications_added
+    finally:
+        db.close()
 def delete_notification(notification_id: int):
     db = SessionLocal()
     notification = db.query(Notification).filter(Notification.id == notification_id).first()
@@ -198,26 +194,32 @@ def get_notification_by_id(notification_id: int):
     db.close()
     return notification.to_dict() if notification else None
 
-def send_firebase_notification(notification):
-    print('New Notification sedding to Users')
+from firebase_admin import messaging
+
+def send_firebase_notification(notification_dict):
+    """
+    Sends a Firebase notification to all users if a new or updated notification is added.
+    Takes a dictionary instead of SQLAlchemy model instance.
+    """
+    print('Sending new notification to users...')
+    print(notification_dict)
     message = messaging.Message(
         notification=messaging.Notification(
             title="New Notification",
-            body=notification["text"]
+            body=notification_dict['text']  # Use dictionary instead of object attribute
         ),
         data={
-            "click_action": notification["url"],
-            'url':notification["url"]
+            "click_action": notification_dict['url'],
+            "url": notification_dict['url']
         },
-        topic="all"
+        topic="all"  # Sending to all subscribed users
     )
-    
+
     try:
         response = messaging.send(message)
         return 200, {"message_id": response}
     except Exception as e:
         return 500, {"error": str(e)}
-
 @app.get("/notifications")
 def get_notifications(
     page: int = Query(1, ge=1, description="Page number"),
@@ -241,11 +243,10 @@ def get_notifications(
 def scrape_and_store_notifications():
     print('notification scraping started')
     notifications = scrape_notifications()
-    newNotifications = save_notifications(notifications)
-    for notification in newNotifications:
-        send_firebase_notification(notification)
-    return {"message": "Notifications scraped, saved, and sent successfully","added":newNotifications}
-
+    new_notifications = save_notifications(notifications)
+    for notification in new_notifications:
+        send_firebase_notification(notification)  # Now passing dictionary instead of model instance
+    return {"message": "Notifications scraped, saved, and sent successfully", "added": new_notifications}
 @app.delete("/notifications/{notification_id}")
 async def delete_notification_endpoint(notification_id: int):
     if delete_notification(notification_id):
