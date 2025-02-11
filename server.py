@@ -145,21 +145,41 @@ def load_notifications(
     }
 
 def save_notifications(notifications):
-    notificationsAdded = []
+    notifications_added = []
     db: Session = SessionLocal()
+
     for notification_data in notifications:
-        notification = Notification(
-            text=notification_data["text"].strip(),
-            url=notification_data["url"].strip()
-        )
-        try:
-            db.add(notification)
+        text = notification_data["text"].strip()
+        url = notification_data["url"].strip()
+
+        # Check if a notification with the same text & URL exists
+        existing_notification = db.query(Notification).filter_by(text=text, url=url).first()
+
+        if existing_notification:
+            # No update needed if the same notification already exists
+            continue
+
+        # Check if a notification with the same text or URL exists
+        notification_to_update = db.query(Notification).filter(
+            (Notification.text == text) | (Notification.url == url)
+        ).first()
+
+        if notification_to_update:
+            # Update notification if text or URL is different
+            if notification_to_update.text != text or notification_to_update.url != url:
+                notification_to_update.text = text
+                notification_to_update.url = url
+                db.commit()
+                notifications_added.append(notification_to_update)
+        else:
+            # Create new notification if no existing record is found
+            new_notification = Notification(text=text, url=url)
+            db.add(new_notification)
             db.commit()
-            notificationsAdded.append(notification)
-        except IntegrityError:
-            db.rollback()
+            notifications_added.append(new_notification)
+
     db.close()
-    return notificationsAdded
+    return notifications_added
 
 def delete_notification(notification_id: int):
     db = SessionLocal()
