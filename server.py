@@ -224,7 +224,7 @@ def scrape_and_store_notifications():
     newNotifications = save_notifications(notifications)
     for notification in newNotifications:
         send_firebase_notification(notification)
-    return {"message": "Notifications scraped, saved, and sent successfully"}
+    return {"message": "Notifications scraped, saved, and sent successfully","added":newNotifications}
 
 @app.delete("/notifications/{notification_id}")
 async def delete_notification_endpoint(notification_id: int):
