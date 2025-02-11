@@ -2,7 +2,6 @@ import datetime
 import requests
 from bs4 import BeautifulSoup
 from fastapi import FastAPI, HTTPException, Query
-import json
 import os
 import firebase_admin
 from firebase_admin import credentials, messaging
@@ -93,7 +92,8 @@ def scrape_notifications():
                     # Use the original href if it already starts with http or https
                     full_url = href
                 scraped_notifications.append({"text": text, "url": full_url})
-    
+    print("Scareped Notifications: ", len(scraped_notifications))
+    print(scraped_notifications)
     return scraped_notifications
 
 class SortBy(str, Enum):
